@@ -21,15 +21,13 @@ Install through the Thymer Plugins Manager, or paste [`dist/plugin.js`](dist/plu
 
 ## Using it
 
-Open the settings with **Plugin: Cursor Tweaks** from the command palette. Everything applies live.
+Open the settings with **Plugin: Cursor Tweaks** from the command palette — the only command the plugin registers. Everything applies live.
 
-Three more commands are registered:
+The panel opens on a big on/off switch: turn it off and you get Thymer's own caret back. The panel stays fully editable while it's off, and everything you change applies the moment you switch it back on.
 
-| Command | What it does |
-|---|---|
-| `Cursor Tweaks: Toggle on/off` | Turns the custom cursor off and Thymer's own caret back on. |
-| `Cursor Tweaks: Cycle preset` | Steps through your saved presets, one per invocation. |
-| `Cursor Tweaks: Diagnose caret (5s)` | Dev tool. Logs what the engine reads from the caret for five seconds and copies it to the clipboard. Use it when reporting a bug about cursor position. |
+Below that is a preview box. Type in it to try any setting without touching your notes — it stays pinned to the top of the panel as you scroll, so you can watch a change land while you make it. Nothing typed there is saved.
+
+Under **Troubleshooting** there is a **Diagnose caret** button. It records what the engine reads from the caret for five seconds and copies the result to your clipboard; attach that when reporting anything about cursor position.
 
 ### Presets
 
