@@ -3665,7 +3665,6 @@ ${report}
   // settings.js
   var DEFAULTS = Object.freeze({
     // --- structural -------------------------------------------------------
-    enabled: true,
     cursorStyle: "Box",
     // None | Line | Box | Underline
     // --- flat color, one per appearance ------------------------------------
@@ -3786,7 +3785,7 @@ ${report}
     // --- preset bookkeeping ------------------------------------------------
     activePreset: ""
   });
-  var STRUCTURAL = /* @__PURE__ */ new Set(["enabled", "activePreset", "hideNativeCaret", "hideOnWindowBlur"]);
+  var STRUCTURAL = /* @__PURE__ */ new Set(["activePreset", "hideNativeCaret", "hideOnWindowBlur"]);
   var LOOK_KEYS = Object.freeze(Object.keys(DEFAULTS).filter((k) => !STRUCTURAL.has(k)));
   var NUM_SPECS = {
     gradientCount: { min: 2, max: 4, step: 1 },
@@ -4468,6 +4467,78 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
 	/* The ramps run light to dark, so neither a light nor a dark label is legible
 	   across all of them. A shadow on white works on every stop. */
 	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75), 0 0 6px rgba(0, 0, 0, 0.5);
+}
+
+/* The main on/off block.
+
+   Full-perimeter border and a background tint for the on state \u2014 never a
+   single-edge accent bar. An accent applied only to one edge is the house
+   signature of generated UI and is banned repo-wide; a symmetric border reads
+   as deliberate. */
+.${ROOT_CLASS}-panel .cs-power {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin: 0 0 14px;
+	padding: 14px 16px;
+	border: 1px solid var(--border-default, rgba(127, 127, 127, 0.16));
+	border-radius: calc(var(--tps-radius, 6px) + 2px);
+	background: var(--bg-default, rgba(127, 127, 127, 0.06));
+}
+.${ROOT_CLASS}-panel .cs-power.cs-power-on {
+	border-color: var(--tps-accent, #04d1ab);
+	background: color-mix(in srgb, var(--tps-accent, #04d1ab) 8%, transparent);
+}
+.${ROOT_CLASS}-panel .cs-power-text {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.${ROOT_CLASS}-panel .cs-power-title {
+	font-size: 14px;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+}
+.${ROOT_CLASS}-panel .cs-power-state {
+	margin-top: 3px;
+	font-size: 11px;
+	line-height: 1.45;
+	color: var(--text-muted, rgba(127, 127, 127, 0.9));
+}
+
+.${ROOT_CLASS}-panel .cs-switch {
+	flex: 0 0 auto;
+	position: relative;
+	width: 46px;
+	height: 26px;
+	padding: 0;
+	border: 1px solid var(--border-default, rgba(127, 127, 127, 0.2));
+	border-radius: 999px;
+	background: var(--bg-hover, rgba(127, 127, 127, 0.14));
+	cursor: pointer;
+	transition: background 120ms ease, border-color 120ms ease;
+}
+.${ROOT_CLASS}-panel .cs-switch[aria-checked="true"] {
+	background: var(--tps-accent, #04d1ab);
+	border-color: var(--tps-accent, #04d1ab);
+}
+.${ROOT_CLASS}-panel .cs-switch[aria-busy="true"] {
+	opacity: 0.5;
+	cursor: default;
+}
+.${ROOT_CLASS}-panel .cs-switch-knob {
+	position: absolute;
+	top: 50%;
+	left: 3px;
+	width: 18px;
+	height: 18px;
+	margin-top: -9px;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+	transition: transform 120ms ease;
+}
+.${ROOT_CLASS}-panel .cs-switch[aria-checked="true"] .cs-switch-knob {
+	transform: translateX(20px);
 }
 
 .${ROOT_CLASS}-panel .cs-hint {
@@ -8463,6 +8534,35 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
       placeholder: "Type here to see your cursor\u2026\nPress Enter for Thunderstrike."
     });
     if (prevValue) demo.value = prevValue;
+    const on = !ctl.disabled;
+    let toggleBusy = false;
+    const bigToggle = h(
+      "div",
+      { class: "cs-power" + (on ? " cs-power-on" : "") },
+      h(
+        "div",
+        { class: "cs-power-text" },
+        h("div", { class: "cs-power-title" }, "Cursor Tweaks"),
+        h(
+          "div",
+          { class: "cs-power-state" },
+          on ? "On \u2014 your cursor is being drawn." : "Off \u2014 Thymer\u2019s own caret is back. Settings below stay editable and apply when you switch it on."
+        )
+      ),
+      h("button", {
+        type: "button",
+        class: "cs-switch",
+        role: "switch",
+        "aria-checked": String(on),
+        "aria-label": on ? "Turn Cursor Tweaks off" : "Turn Cursor Tweaks on",
+        onClick: /* @__PURE__ */ __name((ev) => {
+          if (toggleBusy) return;
+          toggleBusy = true;
+          ev.currentTarget.setAttribute("aria-busy", "true");
+          ctl.toggleDisabled(!on);
+        }, "onClick")
+      }, h("span", { class: "cs-switch-knob" }))
+    );
     const presetsBody = buildPresets(ctl);
     const cursorBody = [
       tabs({
@@ -8707,6 +8807,7 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
       // Sticky so it stays reachable while you scroll the settings below it —
       // judging a blink rate or a smear means typing in it repeatedly, and
       // scrolling back to the top each time made that unusable.
+      bigToggle,
       section({ label: "Preview", body: [demo, optionNote("Nothing typed here is saved.")], persistKey: "preview" }),
       section({ label: "Presets", collapsible: true, defaultOpen: false, body: presetsBody }),
       section({ label: "Cursor", body: cursorBody.filter(Boolean) }),
@@ -8718,7 +8819,20 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
       section({ label: "Context", collapsible: true, defaultOpen: false, body: contextBody.filter(Boolean) }),
       section({ label: "Idle & ghost", collapsible: true, defaultOpen: false, body: idleBody.filter(Boolean) }),
       section({ label: "Feedback", collapsible: true, defaultOpen: false, body: feedbackBody.filter(Boolean) }),
-      section({ label: "Torch", collapsible: true, defaultOpen: false, body: torchBody.filter(Boolean) })
+      section({ label: "Torch", collapsible: true, defaultOpen: false, body: torchBody.filter(Boolean) }),
+      section({
+        label: "Troubleshooting",
+        collapsible: true,
+        defaultOpen: false,
+        body: [
+          h(
+            "div",
+            { class: "cs-input-row" },
+            button({ label: "Diagnose caret (5s)", onClick: /* @__PURE__ */ __name(() => ctl.diagnose(), "onClick") })
+          ),
+          optionNote("Records what the engine reads from the caret for five seconds and copies it to the clipboard. Useful when reporting a bug about cursor position or a stray second cursor.")
+        ]
+      })
     ]);
     const previewSection = built.querySelector(".tps-section");
     if (previewSection) {
@@ -8883,7 +8997,7 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
   // plugin.js
   var PANEL_TYPE = "cursor-tweaks-settings";
   var PLUGIN_NAME = "Cursor Tweaks";
-  var PLUGIN_VERSION = "2.0.0";
+  var PLUGIN_VERSION = "2.1.0";
   var CANVAS_Z_INDEX = 60;
   var Plugin = class extends AppPlugin {
     static {
@@ -8913,8 +9027,6 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
     _panelEl = null;
     /** @type {any} */
     _commandItem = null;
-    /** @type {any[]} */
-    _extraCommands = [];
     /** @type {CursorEngine | null} */
     _engine = null;
     /** @type {HTMLStyleElement | null} */
@@ -8945,26 +9057,6 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
         icon: "wand",
         onSelected: /* @__PURE__ */ __name(() => this._openPanel(), "onSelected")
       });
-      this._extraCommands.push(this.ui.addCommandPaletteCommand({
-        label: `${PLUGIN_NAME}: Toggle on/off`,
-        icon: "wand",
-        onSelected: /* @__PURE__ */ __name(() => this._toggleEnabled(), "onSelected")
-      }));
-      this._extraCommands.push(this.ui.addCommandPaletteCommand({
-        label: `${PLUGIN_NAME}: Random look`,
-        icon: "wand",
-        onSelected: /* @__PURE__ */ __name(() => this._randomize(), "onSelected")
-      }));
-      this._extraCommands.push(this.ui.addCommandPaletteCommand({
-        label: `${PLUGIN_NAME}: Cycle preset`,
-        icon: "wand",
-        onSelected: /* @__PURE__ */ __name(() => this._cyclePreset(), "onSelected")
-      }));
-      this._extraCommands.push(this.ui.addCommandPaletteCommand({
-        label: `${PLUGIN_NAME}: Diagnose caret (5s)`,
-        icon: "wand",
-        onSelected: /* @__PURE__ */ __name(() => this._diagnoseCaret(), "onSelected")
-      }));
       this.ui.registerCustomPanelType(PANEL_TYPE, (pluginPanel) => {
         try {
           pluginPanel.setTitle(`${PLUGIN_NAME} Settings`);
@@ -9017,13 +9109,6 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
         this._commandItem.remove();
         this._commandItem = null;
       }
-      for (const cmd of this._extraCommands) {
-        try {
-          cmd.remove();
-        } catch {
-        }
-      }
-      this._extraCommands = [];
       this._panelEl = null;
     }
     /**
@@ -9142,7 +9227,7 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
      */
     _applyNativeCaretTint() {
       const bodyless = this._settings.cursorStyle === "None";
-      const live = !!this._engine && !this._disabled && !!this._settings.enabled;
+      const live = !!this._engine && !this._disabled;
       if (!this._dynamicStyle) {
         this._dynamicStyle = document.createElement("style");
         this._dynamicStyle.id = "cs-dynamic";
@@ -9172,8 +9257,7 @@ body.${BODY_ACTIVE_CLASS} div.listview-caret-self {
     _applySettings() {
       this._applyBodyClasses();
       this._applyNativeCaretTint();
-      if (this._disabled) return;
-      if (!this._settings.enabled) {
+      if (this._disabled) {
         this._stopEngine();
         return;
       }
@@ -9213,25 +9297,6 @@ body.${BODY_ACTIVE_CLASS} div.listview-caret-self {
       this._toast("Reset to defaults.");
     }
     /* ---- commands --------------------------------------------------------- */
-    _toggleEnabled() {
-      const next = !this._settings.enabled;
-      this._set({ enabled: next });
-      this._renderPanel();
-      this._toast(next ? "Cursor Tweaks on." : "Cursor Tweaks off.");
-    }
-    _cyclePreset() {
-      const presets = this._settings.presets || {};
-      const names = Object.keys(presets);
-      if (!names.length) {
-        this._toast("No presets saved yet.");
-        return;
-      }
-      const idx = names.indexOf(this._settings.activePreset);
-      const next = names[(idx + 1) % names.length];
-      this._set({ ...pickLook(presets[next]), activePreset: next });
-      this._renderPanel();
-      this._toast(`Preset: ${next}`);
-    }
     /**
      * Live caret diagnostic.
      *
@@ -9424,6 +9489,7 @@ body.${BODY_ACTIVE_CLASS} div.listview-caret-self {
           setLive: /* @__PURE__ */ __name((patch) => this._setLive(patch), "setLive"),
           rerender: /* @__PURE__ */ __name(() => this._renderPanel(), "rerender"),
           randomize: /* @__PURE__ */ __name(() => this._randomize(), "randomize"),
+          diagnose: /* @__PURE__ */ __name(() => this._diagnoseCaret(), "diagnose"),
           resetLook: /* @__PURE__ */ __name(() => this._resetLook(), "resetLook"),
           toggleDisabled: /* @__PURE__ */ __name((nextOn) => {
             void this._settingsStore.setDisabled(!nextOn);
