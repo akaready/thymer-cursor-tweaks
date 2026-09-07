@@ -3693,6 +3693,10 @@ ${report}
     boxHollowWidth: 2,
     // --- blinking ----------------------------------------------------------
     blinkingEnabled: true,
+    // On by default: the plugin's caret should feel like Thymer's caret unless
+    // the user deliberately chooses otherwise. Reads the real cadence off
+    // Thymer's own stylesheet — see blink-cadence.js.
+    blinkMatchThymer: true,
     blinkSpeed: 1.2,
     blinkOnOffBalance: 0.5,
     blinkDelayMs: 0,
@@ -4114,6 +4118,9 @@ ${report}
       glow: chance("glow", 0.6),
       showChar: chance("showChar", 0.5),
       blinkingEnabled: chance("blinkingEnabled", 0.6),
+      // A randomised look is the user asking for something that is NOT Thymer's
+      // default, so the speed it rolls has to be free to apply.
+      blinkMatchThymer: false,
       blinkSpeed: num("blinkSpeed"),
       blinkOnOffBalance: num("blinkOnOffBalance"),
       blinkBreathing: chance("blinkBreathing", 0.25),
@@ -4552,6 +4559,7 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
   // caret.js
   var THYMER_CARET_GRACE_MS = 120;
   var CARET_EL_SEL = "div.listview-caret-self";
+  var PREVIEW_SEL = ".cs-demo";
   function inPreviewBox(doc) {
     try {
       const active = doc.activeElement;
@@ -4562,6 +4570,7 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
   }
   __name(inPreviewBox, "inPreviewBox");
   var FOCUSED_PANEL_SEL = ".panel.focused-panel, .panel.has-focus";
+  var EDITOR_ROOT_SEL = ".app-chrome-panels .panel";
   var LISTITEM_SEL = ".listitem[data-guid]";
   function isTextCaretHost(el2) {
     if (!el2) return false;
@@ -5158,11 +5167,11 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
     return -(Math.cos(Math.PI * x) - 1) / 2;
   }
   __name(easeInOutSine, "easeInOutSine");
-  function blinkAlphaAt(nowMs, speed, onOffBalance = 0.5) {
+  function blinkAlphaAt(nowMs, speed, onOffBalance = 0.5, fadeFrac = 0.15) {
     if (speed <= 0) return 1;
     const period = 2500 / speed;
-    const phase = nowMs % period / period;
-    const fade = 0.15;
+    const phase = nowMs <= 0 ? 0 : nowMs % period / period;
+    const fade = Math.max(0.01, Math.min(0.45, fadeFrac));
     const balance = Math.max(0.1, Math.min(0.9, onOffBalance));
     const hold = 1 - fade * 2;
     const p1 = hold * balance;
@@ -5213,6 +5222,131 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
     return `#${(1 << 24 | Math.round(r) << 16 | Math.round(g) << 8 | Math.round(b)).toString(16).slice(1)}`;
   }
   __name(heatColor, "heatColor");
+
+  // blink-cadence.js
+  var THYMER_BLINK_FALLBACK = {
+    periodMs: 1400,
+    delayMs: 500,
+    // Fraction of the cycle spent fading, each way.
+    fade: 0.2,
+    // Lit time as a share of lit+dark. 0.5 is even.
+    balance: 0.5,
+    source: "fallback"
+  };
+  function cssTimeMs(v) {
+    const s = String(v || "").trim();
+    const n = parseFloat(s);
+    if (!isFinite(n)) return NaN;
+    return /ms$/.test(s) ? n : n * 1e3;
+  }
+  __name(cssTimeMs, "cssTimeMs");
+  function isPlainCaretBlink(selectorText) {
+    return String(selectorText || "").split(",").some((part) => part.trim() === ".caret-blink");
+  }
+  __name(isPlainCaretBlink, "isPlainCaretBlink");
+  function shapeFromKeyframes(kf) {
+    const stops = [];
+    for (const r of Array.from(kf.cssRules || [])) {
+      const rule = (
+        /** @type {any} */
+        r
+      );
+      const o = parseFloat(rule.style && rule.style.opacity);
+      if (!isFinite(o)) continue;
+      for (const key of String(rule.keyText || "").split(",")) {
+        const pct = parseFloat(key);
+        if (isFinite(pct)) stops.push({ pct, o });
+      }
+    }
+    if (stops.length < 2) return null;
+    stops.sort((a, b) => a.pct - b.pct);
+    const dark = stops.filter((s) => s.o <= 0.01);
+    const lit = stops.filter((s) => s.o >= 0.99);
+    if (!dark.length || !lit.length) return null;
+    const darkStart = dark[0].pct;
+    const darkEnd = dark[dark.length - 1].pct;
+    const litAfter = lit.filter((s) => s.pct > darkEnd);
+    if (!litAfter.length) return null;
+    const litStart = litAfter[0].pct;
+    const fadeOut = darkStart / 100;
+    const darkHold = (darkEnd - darkStart) / 100;
+    const fadeIn = (litStart - darkEnd) / 100;
+    const litHold = (100 - litStart) / 100;
+    const fade = (fadeOut + fadeIn) / 2;
+    const holds = litHold + darkHold;
+    if (!(fade > 0) || !(holds > 0)) return null;
+    return { fade, balance: litHold / holds };
+  }
+  __name(shapeFromKeyframes, "shapeFromKeyframes");
+  function readThymerBlinkCadence(doc) {
+    const d = doc || document;
+    try {
+      let periodMs = NaN;
+      let delayMs = NaN;
+      let animName = "";
+      const keyframes = {};
+      for (const sheet of Array.from(d.styleSheets)) {
+        let rules;
+        try {
+          rules = /** @type {any} */
+          sheet.cssRules;
+        } catch {
+          continue;
+        }
+        if (!rules) continue;
+        const walk = /* @__PURE__ */ __name((list) => {
+          for (const r of Array.from(list)) {
+            const rule = (
+              /** @type {any} */
+              r
+            );
+            if (rule.name && rule.cssRules) {
+              keyframes[rule.name] = rule;
+              continue;
+            }
+            if (rule.cssRules && !rule.selectorText) {
+              walk(rule.cssRules);
+              continue;
+            }
+            if (!rule.selectorText || !isPlainCaretBlink(rule.selectorText)) continue;
+            const dur = cssTimeMs(rule.style.animationDuration);
+            if (isFinite(dur) && dur > 0) {
+              periodMs = dur;
+              delayMs = cssTimeMs(rule.style.animationDelay);
+              animName = String(rule.style.animationName || "").trim();
+            }
+          }
+        }, "walk");
+        try {
+          walk(rules);
+        } catch {
+        }
+      }
+      if (!isFinite(periodMs) || periodMs <= 0) return { ...THYMER_BLINK_FALLBACK };
+      const shape = animName && keyframes[animName] ? shapeFromKeyframes(keyframes[animName]) : null;
+      return {
+        periodMs,
+        delayMs: isFinite(delayMs) && delayMs > 0 ? delayMs : 0,
+        fade: shape ? shape.fade : THYMER_BLINK_FALLBACK.fade,
+        balance: shape ? shape.balance : THYMER_BLINK_FALLBACK.balance,
+        source: shape ? "measured" : "measured-duration-only"
+      };
+    } catch {
+      return { ...THYMER_BLINK_FALLBACK };
+    }
+  }
+  __name(readThymerBlinkCadence, "readThymerBlinkCadence");
+  function thymerBlinkCadence(host, doc) {
+    const cached = host._blinkCadence;
+    if (cached && cached.source !== "fallback") return cached;
+    const now = Date.now();
+    if (cached && now - (host._blinkCadenceT || 0) < 5e3) return cached;
+    const read = readThymerBlinkCadence(doc);
+    host._blinkCadence = read;
+    host._blinkCadenceT = now;
+    return read;
+  }
+  __name(thymerBlinkCadence, "thymerBlinkCadence");
 
   // effects.js
   var THUNDER_LIFE_MS = 280;
@@ -5864,16 +5998,37 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
     return grad;
   }
   __name(createEnergyGradient, "createEnergyGradient");
+  var TYPING_BLINK_HOLD_MS = 700;
+  var CLICK_BLINK_HOLD_MS = 900;
   function blinkPhase(e, now) {
     if (!e.settings.blinkingEnabled) return 1;
-    let holdMs = 0;
-    if (e.settings.smoothEnabled && e.settings.smoothStopBlinking) holdMs = 450;
-    const delayMs = Math.max(0, e.settings.blinkDelayMs ?? 0);
-    if (delayMs > holdMs) holdMs = delayMs;
-    if (holdMs > 0 && now - e.lastMoveTime < holdMs) return 1;
-    return blinkAlphaAt(now, Math.max(0, e.settings.blinkSpeed), e.settings.blinkOnOffBalance ?? 0.5);
+    const anchor = Math.max(e.lastMoveTime || 0, e._lastTypeT || 0);
+    let resumeAt = anchor + typingHoldMs(e);
+    if ((e._blinkForceOnUntil || 0) > resumeAt) resumeAt = e._blinkForceOnUntil;
+    if (now < resumeAt) return 1;
+    const cad = matchedCadence(e);
+    const speed = cad ? 2500 / cad.periodMs : Math.max(0, e.settings.blinkSpeed);
+    const balance = cad ? cad.balance : e.settings.blinkOnOffBalance ?? 0.5;
+    const fade = cad ? cad.fade : 0.15;
+    return blinkAlphaAt(now - resumeAt, speed, balance, fade);
   }
   __name(blinkPhase, "blinkPhase");
+  function matchedCadence(e) {
+    if (!e.settings.blinkMatchThymer) return null;
+    const cad = thymerBlinkCadence(e, e._doc || document);
+    return cad && cad.periodMs > 0 ? cad : null;
+  }
+  __name(matchedCadence, "matchedCadence");
+  function typingHoldMs(e) {
+    let hold = 0;
+    if (e.settings.smoothStopBlinking) {
+      const cad = matchedCadence(e);
+      hold = cad && cad.delayMs > 0 ? cad.delayMs : TYPING_BLINK_HOLD_MS;
+    }
+    const delayMs = Math.max(0, e.settings.blinkDelayMs ?? 0);
+    return Math.max(hold, delayMs);
+  }
+  __name(typingHoldMs, "typingHoldMs");
   function blinkAlpha(e, now) {
     if (e.settings.blinkBreathing) return 1;
     return blinkPhase(e, now);
@@ -5961,9 +6116,9 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
     const alpha = blinkAlpha(e, now);
     const color = e.getActiveColor() || active.textColor || "#ffffff";
     ctx.save();
-    if (settings.glow || comboGlow(e) > 0) {
+    if (glowActive(e)) {
       ctx.shadowColor = color;
-      ctx.shadowBlur = (8 + comboGlow(e) * 14) * alpha;
+      ctx.shadowBlur = glowBlur(e, GLOW_LINE) * alpha;
     }
     let rx;
     let ry;
@@ -6009,9 +6164,9 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
     const alpha = blinkAlpha(e, now);
     const renderW = active.w;
     ctx.save();
-    if (settings.glow || comboGlow(e) > 0) {
+    if (glowActive(e)) {
       ctx.shadowColor = color;
-      ctx.shadowBlur = (10 + comboGlow(e) * 16) * alpha;
+      ctx.shadowBlur = glowBlur(e, GLOW_BOX) * alpha;
     }
     const paintStyle = settings.energyEffect ? createEnergyGradient(e, active.x, active.top, renderW, active.h, color, 0.9 * alpha * opacity) : cursorPaint(e, active.x, active.top, renderW, active.h, color, 0.9 * alpha * opacity);
     if (hollow) {
@@ -6061,6 +6216,22 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
     }
   }
   __name(drawBoxCaret, "drawBoxCaret");
+  var GLOW_LINE = { base: 8, combo: 14 };
+  var GLOW_BOX = { base: 10, combo: 16 };
+  function glowActive(e) {
+    return !!e.settings.glow || comboGlow(e) > 0;
+  }
+  __name(glowActive, "glowActive");
+  function glowBlur(e, spec) {
+    return spec.base + comboGlow(e) * spec.combo;
+  }
+  __name(glowBlur, "glowBlur");
+  function glowReach(e) {
+    if (!glowActive(e)) return 0;
+    const widest = Math.max(glowBlur(e, GLOW_LINE), glowBlur(e, GLOW_BOX));
+    return Math.ceil(widest * 1.5);
+  }
+  __name(glowReach, "glowReach");
   function comboGlow(e) {
     if (!e.settings.comboEnabled || !e.settings.comboGlow) return 0;
     return e.comboLevel || 0;
@@ -6126,7 +6297,7 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
           if (q[k].y > y1) y1 = q[k].y;
         }
       }
-      const pad = 24 + Math.max(0, e.settings.caretWidthPx || 0);
+      const pad = 24 + Math.max(0, e.settings.caretWidthPx || 0) + glowReach(e);
       e.markDirty(x0 - pad, y0 - pad, x1 - x0 + pad * 2, y1 - y0 + pad * 2);
     }
     const breath = a ? breathScale(e, performance.now()) : 1;
@@ -6378,6 +6549,7 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
       const k = ev.key;
       const isTyping = !ev.isComposing && !ev.repeat && (typeof k === "string" && k.length === 1 || k === "Backspace" || k === "Enter" || k === " " || k === "Spacebar" || k === "Tab");
       if (isTyping) {
+        e._lastTypeT = performance.now();
         if (e.settings.speedDemon) {
           e.heat = Math.min(1, e.heat + 0.09 * (e.settings.speedDemonSensitivity ?? 1));
         }
@@ -6385,6 +6557,14 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
         playKeyClick(e);
       }
     }, "onKeyDown");
+    const onPointerDown = /* @__PURE__ */ __name((ev) => {
+      e.markActivity();
+      const t = ev.target;
+      const el2 = t instanceof Element ? t : null;
+      const inEditor = !!el2 && !!(el2.closest(EDITOR_ROOT_SEL) || el2.closest(PREVIEW_SEL));
+      if (!inEditor) return;
+      e._blinkForceOnUntil = performance.now() + CLICK_BLINK_HOLD_MS;
+    }, "onPointerDown");
     const onResize = /* @__PURE__ */ __name(() => {
       e._chromeCache = null;
       e._lastWrapperRect = "";
@@ -6402,7 +6582,7 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
     const capPassive = { capture: true, passive: true };
     on(win, "keydown", onKeyDown, cap);
     on(win, "keyup", onActivity, capPassive);
-    on(win, "pointerdown", onActivity, capPassive);
+    on(win, "pointerdown", onPointerDown, capPassive);
     on(win, "pointerup", onActivity, capPassive);
     on(win, "mouseup", onActivity, capPassive);
     on(win, "focusin", onActivity, capPassive);
@@ -6769,6 +6949,8 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
       this.mouseY = 0;
       this.lastMouseMove = 0;
       this.lastMoveTime = 0;
+      this._lastTypeT = 0;
+      this._blinkForceOnUntil = 0;
       this.lastCaret = null;
       this.lastCaretMove = 0;
       this.typingSpeedMod = 1;
@@ -6845,6 +7027,7 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
     setSettings(settings) {
       this.settings = settings;
       this._drawSig = null;
+      this._dirtyFull = true;
       this.markActivity();
       this.syncTorch();
     }
@@ -7660,6 +7843,12 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
           eff.underlineWidthPx,
           eff.blinkBreathing,
           eff.blinkBreathDepth,
+          // Blink shape: editing any of these on a settled caret must repaint it.
+          eff.blinkMatchThymer,
+          eff.blinkSpeed,
+          eff.blinkOnOffBalance,
+          eff.smoothStopBlinking,
+          eff.blinkDelayMs,
           // Each of these changes painted pixels on a SETTLED cursor, so
           // omitting one makes editing it appear to do nothing until the
           // next keystroke wakes the loop.
@@ -8632,13 +8821,25 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
         color("colorLight", "Light theme")
       ]
     ];
+    const cadence = readThymerBlinkCadence();
+    const cadenceNote = cadence.source === "fallback" ? "Thymer's cadence could not be read just now; using its published 1.4s rhythm." : `Matched to Thymer: ${(cadence.periodMs / 1e3).toFixed(2)}s cycle, ${Math.round(cadence.balance * 100)}% lit, holding ${Math.round(cadence.delayMs)}ms after you type.`;
     const blinkBody = [
       checkShape("blinkingEnabled", "Blinking"),
       ...s.blinkingEnabled ? [sub([
-        slider("blinkSpeed", "Speed", { min: 0.1, max: 5, step: 0.1, format: /* @__PURE__ */ __name((v) => v.toFixed(1) + "\xD7", "format") }),
-        slider("blinkOnOffBalance", "Balance", { min: 0.1, max: 0.9, step: 0.01, format: /* @__PURE__ */ __name((v) => Math.round(v * 100) + "% lit", "format") }),
+        checkShape("blinkMatchThymer", "Match Thymer's cadence", "Blink at exactly the rhythm Thymer's own caret uses."),
+        optionNote(cadenceNote),
+        // Hidden rather than disabled while matching: a speed slider that the
+        // cursor visibly ignores is worse than no slider.
+        ...s.blinkMatchThymer ? [] : [
+          slider("blinkSpeed", "Speed", { min: 0.1, max: 5, step: 0.1, format: /* @__PURE__ */ __name((v) => v.toFixed(1) + "\xD7", "format") }),
+          slider("blinkOnOffBalance", "Balance", { min: 0.1, max: 0.9, step: 0.01, format: /* @__PURE__ */ __name((v) => Math.round(v * 100) + "% lit", "format") })
+        ],
+        // Lives here, with the rest of the blink controls, rather than buried
+        // in Smooth Movement — which is also where it used to be silently
+        // gated on smoothing being switched on.
+        check("smoothStopBlinking", "Don't blink while typing"),
         num("blinkDelayMs", "Delay after typing", { min: 0, max: 5e3, step: 50, unit: "ms" }),
-        optionNote("How long the cursor stays fully lit after any move or keystroke before blinking resumes."),
+        optionNote("How long the cursor stays fully lit after any move or keystroke before blinking resumes. A click always holds it lit, whatever these say."),
         checkShape("blinkBreathing", "Breathing", "Shrink and swell instead of fading out, so the cursor never disappears."),
         s.blinkBreathing ? sub([slider("blinkBreathDepth", "Breath depth", { min: 0.05, max: 0.5, step: 0.01, format: /* @__PURE__ */ __name((v) => Math.round(v * 100) + "%", "format") })]) : null
       ])] : [],
@@ -8651,9 +8852,7 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
         slider("smoothness", "Glide", { min: 0.05, max: 0.3, step: 0.01, format: /* @__PURE__ */ __name((v) => Math.round(v * 100) + "%", "format") }),
         slider("catchUpSpeed", "Catch-up speed", { min: 0.3, max: 0.8, step: 0.01, format: /* @__PURE__ */ __name((v) => Math.round(v * 100) + "%", "format") }),
         checkShape("smoothAdaptive", "Speed up when typing fast"),
-        s.smoothAdaptive ? sub([slider("maxCatchUpSpeed", "Max catch-up", { min: 0.5, max: 1, step: 0.01, format: /* @__PURE__ */ __name((v) => Math.round(v * 100) + "%", "format") })]) : null,
-        // Needs a blink to suppress.
-        s.blinkingEnabled ? check("smoothStopBlinking", "Don't blink while typing") : null
+        s.smoothAdaptive ? sub([slider("maxCatchUpSpeed", "Max catch-up", { min: 0.5, max: 1, step: 0.01, format: /* @__PURE__ */ __name((v) => Math.round(v * 100) + "%", "format") })]) : null
       ])] : [],
       // Outside the smoothEnabled block on purpose: it governs the smear and the
       // ghost too, both of which streak across line breaks with glide switched off.
@@ -8997,7 +9196,7 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
   // plugin.js
   var PANEL_TYPE = "cursor-tweaks-settings";
   var PLUGIN_NAME = "Cursor Tweaks";
-  var PLUGIN_VERSION = "2.1.0";
+  var PLUGIN_VERSION = "2.2.0";
   var CANVAS_Z_INDEX = 60;
   var Plugin = class extends AppPlugin {
     static {

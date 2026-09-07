@@ -9,7 +9,7 @@ Forge your text cursor. Cursor Tweaks replaces Thymer's caret with a canvas-rend
 - **Three cursor styles** — Box, Line (with optional I-beam serifs), and Underline (with adjustable bar thickness).
 - **Smooth movement** — the cursor eases and glides between positions instead of jumping, with adjustable glide, catch-up speed, and an optional adaptive boost while typing fast.
 - **Motion smear** — a four-corner spring drags the cursor's shape along its line of travel, optionally tapering to a comet-tail point.
-- **Customisable blinking** — control both blink speed and how the on/off time is balanced within each cycle. Breathing mode makes the cursor shrink and swell instead of vanishing.
+- **Customisable blinking** — matches Thymer's own caret cadence by default, read live from Thymer's stylesheet rather than hardcoded, so the two feel like the same cursor. Turn matching off to set the speed and the on/off balance by hand. The cursor holds solid while you type and across every click — a caret caught mid-blink is the one thing that can't tell you where you just clicked. Breathing mode makes it shrink and swell instead of vanishing.
 - **Colour** — separate colours for dark and light appearance, or a 2–4 stop gradient ramp (one per appearance). Adjustable thickness, opacity and glow.
 - **After effects** — popping letters (with optional rainbow), a fading pixel trail, backspace disintegration, thunderstrike lightning on Enter, drifting or orbiting stardust, a Speed Demon heat ramp with fire sparks, an energy beam with an aurora variant, and a CRT phosphor trail.
 - **Torch** — a spotlight that darkens everything but a pool of light around the cursor, following the caret or the pointer, optionally breathing in sync with the blink.
