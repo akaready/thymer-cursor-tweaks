@@ -1,0 +1,18 @@
+{
+	"ver": 1,
+	"version": "2.0.0",
+	"name": "Cursor Tweaks",
+	"icon": "wand",
+	"description": "Forge your text cursor — styles, colors, smooth motion, blinking, particle effects, and a torch spotlight.",
+	"instructions": "Cursor Tweaks replaces Thymer's text caret with a canvas-rendered cursor. Pick a style, tune the look, and layer on motion and effects — everything applies live. Save a look as a preset and share it with a code. Ported from Cursor-Smith by SadSnake1 (MIT).",
+	"author": "@akaready",
+	"homepage": "https://akaready.com",
+	"repository": "https://github.com/akaready/thymer-cursor-tweaks",
+	"coffee": "https://buymeacoffee.com/akaready",
+	"__source_repo": "https://github.com/akaready/thymer-cursor-tweaks",
+	"__source_files": {
+		"branch": "main",
+		"json": "plugin.json",
+		"js": "plugin.js"
+	}
+}
