@@ -35,9 +35,11 @@ Under **Troubleshooting** there is a **Diagnose caret** button. It records what 
 
 **Your presets** support Load, Edit, Copy and Delete. *Edit* loads a preset and pre-fills its name in the save field, so saving overwrites it.
 
-**Sharing** — every preset has a **Copy** button that puts a share code on your clipboard. Send it to anyone; they paste it into the import field. Imported codes are fully validated before they touch your settings, so a code from a stranger can only ever set look options.
+**Sharing** — every preset has a **Copy** button that puts a share code on your clipboard. Send it to anyone; they paste it into the import field. A code carries only the settings that differ from the defaults, so a typical preset is around 90 characters and even one that changes every single option stays well under Discord's 2000-character message limit. Codes copied before 2.3.0 were the full snapshot and ran to ~2900 characters; they still import.
 
-A preset stores every look and effect setting. It deliberately does **not** store the plugin's on/off state or the two caret-hiding options, so loading one can never leave you without a cursor.
+Imported codes are fully validated before they touch your settings, so a code from a stranger can only ever set look options. A code referring to a setting your version doesn't have — because it was made with a newer build — is refused outright rather than imported as a partial look.
+
+A preset covers every look and effect setting, but only records the ones you actually changed — anything you left alone follows the plugin's default, and so will track it if that default is ever retuned in a later release. (The six built-ins have always worked this way.) A preset deliberately does **not** store the plugin's on/off state or the two caret-hiding options, so loading one can never leave you without a cursor.
 
 ### Settings scope
 

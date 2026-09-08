@@ -3932,7 +3932,7 @@ ${report}
       if (!byClean.has(name)) byClean.set(name, raw[k]);
     }
     const names = Array.from(byClean.keys()).sort().slice(0, MAX_PRESETS);
-    for (const name of names) out[name] = normalizePresetSnapshot(byClean.get(name));
+    for (const name of names) out[name] = thinLook(normalizePresetSnapshot(byClean.get(name)));
     return out;
   }
   __name(normalizePresets, "normalizePresets");
@@ -3945,26 +3945,197 @@ ${report}
     return out;
   }
   __name(normalizeSettings, "normalizeSettings");
+  var CODE_TAG = "CT1";
+  var SHARE_SLOTS = Object.freeze([
+    "cursorStyle",
+    "colorDark",
+    "colorLight",
+    "gradientEnabled",
+    "gradientCount",
+    "gradientDark1",
+    "gradientDark2",
+    "gradientDark3",
+    "gradientDark4",
+    "gradientLight1",
+    "gradientLight2",
+    "gradientLight3",
+    "gradientLight4",
+    "caretWidthPx",
+    "cursorOpacity",
+    "glow",
+    "showChar",
+    "lineSerifs",
+    "underlineWidthPx",
+    "boxHollow",
+    "boxHollowWidth",
+    "blinkingEnabled",
+    "blinkMatchThymer",
+    "blinkSpeed",
+    "blinkOnOffBalance",
+    "blinkDelayMs",
+    "blinkBreathing",
+    "blinkBreathDepth",
+    "smoothEnabled",
+    "smoothStopBlinking",
+    "smoothness",
+    "catchUpSpeed",
+    "maxCatchUpSpeed",
+    "smoothAdaptive",
+    "snapOnNewline",
+    "moveDelayMs",
+    "smear",
+    "smearStiffness",
+    "smearTrailingStiffness",
+    "smearDamping",
+    "smearTaper",
+    "smearTaperAmount",
+    "smearFillHollow",
+    "popLetters",
+    "popRainbow",
+    "flameTrail",
+    "backspaceDisintegrate",
+    "thunderstrike",
+    "thunderstrikeSize",
+    "thunderstrikeStrength",
+    "thunderstrikeHalo",
+    "stardustEnabled",
+    "stardustAlwaysOn",
+    "stardustDelayMs",
+    "stardustRate",
+    "stardustOrbit",
+    "stardustOrbitRadius",
+    "speedDemon",
+    "speedDemonSparks",
+    "speedDemonSensitivity",
+    "speedDemonSparkQuantity",
+    "speedDemonSparkTrail",
+    "energyEffect",
+    "energySpeed",
+    "energyAurora",
+    "crtEffect",
+    "trailLength",
+    "trailFadeMs",
+    "torchEffect",
+    "overlayFollowMode",
+    "overlayRadius",
+    "overlayDarkness",
+    "overlayIntensity",
+    "overlayColor",
+    "overlayBlinkSync",
+    "overlayBlinkDepth",
+    "overlaySpeed",
+    "idleFadeEnabled",
+    "idleFadeDelayMs",
+    "idleFadeTo",
+    "selectionColorEnabled",
+    "selectionColorDark",
+    "selectionColorLight",
+    "rowTypeTint",
+    "rowTypeTintAmount",
+    "ghostEnabled",
+    "ghostOpacity",
+    "ghostLag",
+    "comboEnabled",
+    "comboThreshold",
+    "comboGlow",
+    "comboShower",
+    "shakeEnabled",
+    "shakeStrength",
+    "shakeDurationMs",
+    "soundEnabled",
+    "soundVolume",
+    "soundPitch",
+    "soundVariation"
+  ]);
+  var SLOT_OF = new Map(SHARE_SLOTS.map((k, i) => [k, i]));
+  function changedKeys(snap) {
+    return LOOK_KEYS.filter((k) => !Object.is(
+      coerce(k, snap[k]),
+      /** @type {any} */
+      DEFAULTS[k]
+    ));
+  }
+  __name(changedKeys, "changedKeys");
+  function thinLook(snap) {
+    const out = {};
+    for (const k of changedKeys(snap)) out[k] = coerce(k, snap[k]);
+    return out;
+  }
+  __name(thinLook, "thinLook");
+  function encodeValue(key, v) {
+    if (typeof v === "boolean") return v ? "1" : "0";
+    if (typeof v === "number") return String(Number(v.toFixed(4)));
+    const str = String(v);
+    if (HEX_KEYS.has(key)) return str.replace(/^#/, "");
+    return encodeURIComponent(str).replace(/~/g, "%7E");
+  }
+  __name(encodeValue, "encodeValue");
+  function decodeValue(key, raw) {
+    const def = (
+      /** @type {any} */
+      DEFAULTS[key]
+    );
+    if (typeof def === "boolean") return raw === "1";
+    if (typeof def === "number") return Number.parseFloat(raw);
+    if (HEX_KEYS.has(key)) return "#" + raw;
+    return decodeURIComponent(raw);
+  }
+  __name(decodeValue, "decodeValue");
   function presetToCode(name, snap) {
-    const payload = JSON.stringify(Object.assign({ __name: name }, snap));
-    return btoa(unescape(encodeURIComponent(payload))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const safeName = encodeURIComponent(String(name)).replace(/~/g, "%7E");
+    const parts = [CODE_TAG, safeName];
+    for (const k of changedKeys(snap)) {
+      const slot = SLOT_OF.get(k);
+      if (slot === void 0) continue;
+      parts.push(slot.toString(36).padStart(2, "0") + encodeValue(k, coerce(k, snap[k])));
+    }
+    return parts.join("~");
   }
   __name(presetToCode, "presetToCode");
   function codeToPreset(code) {
+    if (typeof code !== "string") return { ok: false, reason: "unreadable" };
+    const trimmed = code.trim();
+    if (!trimmed || trimmed.length > MAX_CODE) return { ok: false, reason: "unreadable" };
+    if (!trimmed.startsWith(CODE_TAG + "~")) return legacyCodeToPreset(trimmed);
     try {
-      if (typeof code !== "string") return null;
-      const trimmed = code.trim();
-      if (!trimmed || trimmed.length > MAX_CODE) return null;
-      const b64 = trimmed.replace(/-/g, "+").replace(/_/g, "/");
-      const obj = JSON.parse(decodeURIComponent(escape(atob(b64))));
-      if (!obj || typeof obj !== "object") return null;
-      const name = String(obj.__name || "Imported preset").trim().slice(0, MAX_NAME) || "Imported preset";
-      return { name, snap: normalizePresetSnapshot(obj) };
+      const parts = trimmed.split("~");
+      const raw = {};
+      for (let i = 2; i < parts.length; i++) {
+        const entry = parts[i];
+        if (!entry) continue;
+        const slot = Number.parseInt(entry.slice(0, 2), 36);
+        if (!Number.isInteger(slot) || slot < 0) return { ok: false, reason: "unreadable" };
+        if (slot >= SHARE_SLOTS.length) return { ok: false, reason: "newer" };
+        const key = SHARE_SLOTS[slot];
+        raw[key] = decodeValue(key, entry.slice(2));
+      }
+      return { ok: true, name: readName(parts[1]), snap: normalizePresetSnapshot(raw) };
     } catch {
-      return null;
+      return { ok: false, reason: "unreadable" };
     }
   }
   __name(codeToPreset, "codeToPreset");
+  function legacyCodeToPreset(trimmed) {
+    try {
+      const b64 = trimmed.replace(/-/g, "+").replace(/_/g, "/");
+      const obj = JSON.parse(decodeURIComponent(escape(atob(b64))));
+      if (!obj || typeof obj !== "object") return { ok: false, reason: "unreadable" };
+      return { ok: true, name: readName(obj.__name), snap: normalizePresetSnapshot(obj) };
+    } catch {
+      return { ok: false, reason: "unreadable" };
+    }
+  }
+  __name(legacyCodeToPreset, "legacyCodeToPreset");
+  function readName(v) {
+    let name = "";
+    try {
+      name = decodeURIComponent(String(v ?? ""));
+    } catch {
+      name = String(v ?? "");
+    }
+    return name.trim().slice(0, MAX_NAME) || "Imported preset";
+  }
+  __name(readName, "readName");
   var BUILTIN_PRESETS = Object.freeze({
     "Jell-O": {
       cursorStyle: "Box",
@@ -9106,8 +9277,8 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
     __name(savePreset, "savePreset");
     function importPreset() {
       const decoded = codeToPreset(String(importInput.value || ""));
-      if (!decoded) {
-        ctl.toast("That share code couldn't be read.");
+      if (!decoded.ok) {
+        ctl.toast(decoded.reason === "newer" ? "That code was made with a newer version of Cursor Tweaks. Update the plugin to import it." : "That share code couldn't be read.");
         return;
       }
       let name = decoded.name;
@@ -9196,7 +9367,7 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
   // plugin.js
   var PANEL_TYPE = "cursor-tweaks-settings";
   var PLUGIN_NAME = "Cursor Tweaks";
-  var PLUGIN_VERSION = "2.2.0";
+  var PLUGIN_VERSION = "2.3.0";
   var CANVAS_Z_INDEX = 60;
   var Plugin = class extends AppPlugin {
     static {
