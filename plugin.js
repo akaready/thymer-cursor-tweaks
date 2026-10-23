@@ -1502,6 +1502,81 @@ var plugins = (() => {
   white-space: nowrap;
 }
 
+/* \u2500\u2500 Keyboard shortcut rows (keyRow) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+
+.tps-key-name { min-width: 0; }
+
+.tps-key-desc {
+  font-size: var(--tps-fs-hint);
+  color: var(--tps-text-muted);
+  white-space: normal;
+}
+
+.tps-key-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--tps-space-1);
+}
+
+.tps-key-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 110px;
+  height: var(--tps-control-h-sm);
+  padding: 0 var(--tps-space-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+  font-size: var(--tps-fs-button);
+  color: var(--tps-text);
+  background: var(--tps-bg-input);
+  border: 1px solid var(--tps-divider);
+  border-radius: var(--tps-radius-sm);
+  cursor: pointer;
+  transition: border-color var(--tps-dur-fast) var(--tps-ease-out),
+              background-color var(--tps-dur-fast) var(--tps-ease-out),
+              color var(--tps-dur-fast) var(--tps-ease-out);
+}
+
+.tps-key-chip:hover { border-color: var(--tps-border); }
+
+.tps-key-chip--unbound { color: var(--tps-text-faint); font-style: italic; }
+
+.tps-key-chip[data-capturing="true"] {
+  background: var(--tps-accent-soft);
+  border-color: var(--tps-accent);
+  color: var(--tps-accent);
+  outline: 2px solid var(--tps-accent);
+  outline-offset: 2px;
+}
+
+.tps-key-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tps-control-h-sm);
+  height: var(--tps-control-h-sm);
+  padding: 0;
+  font-size: var(--tps-fs-button);
+  line-height: 1;
+  color: var(--tps-text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--tps-radius-sm);
+  cursor: pointer;
+}
+
+.tps-key-clear:hover {
+  color: var(--tps-text);
+  background: var(--tps-bg-hover);
+  border-color: var(--tps-divider);
+}
+
+.tps-key-chip:focus-visible,
+.tps-key-clear:focus-visible {
+  outline: 2px solid var(--tps-accent);
+  outline-offset: 2px;
+}
+
 /* \u2500\u2500 Tabs / segmented control \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
 
 .tps-tabs {
@@ -2898,7 +2973,11 @@ ${report}
     }
     if (conf.ver === void 0 && conf.custom === void 0) return;
     const hasStubName = typeof conf.name !== "string" || !conf.name.trim() || STUB_NAMES.includes(conf.name.trim());
-    const missingRepo = identity.sourceRepo && conf.__source_repo === void 0;
+    const staleRepo = !!identity.sourceRepo && Array.isArray(identity.legacySourceRepos) && identity.legacySourceRepos.includes(
+      /** @type {string} */
+      conf.__source_repo
+    );
+    const missingRepo = !!identity.sourceRepo && (conf.__source_repo === void 0 || staleRepo);
     if (!hasStubName && !missingRepo) return;
     try {
       let ws = "default";
@@ -9367,7 +9446,7 @@ body.${BODY_ACTIVE_CLASS}.${BODY_HIDE_NATIVE_CLASS} .${ROOT_CLASS}-panel .cs-dem
   // plugin.js
   var PANEL_TYPE = "cursor-tweaks-settings";
   var PLUGIN_NAME = "Cursor Tweaks";
-  var PLUGIN_VERSION = "2.3.0";
+  var PLUGIN_VERSION = "2.3.1";
   var CANVAS_Z_INDEX = 60;
   var Plugin = class extends AppPlugin {
     static {
